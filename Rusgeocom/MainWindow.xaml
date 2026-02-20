@@ -1,0 +1,120 @@
+﻿<Window
+    x:Class="Rusgeocom.MainWindow"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:local="clr-namespace:Rusgeocom"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    Title="RGK(РусГеоКом) парсер"
+    Width="800"
+    
+    Height="450"
+    mc:Ignorable="d">
+    <Window.Resources>
+        <Style TargetType="Button">
+            <Setter Property="Margin" Value="4" />
+            <Setter Property="Padding" Value="8,4" />
+        </Style>
+    </Window.Resources>
+    <DockPanel Margin="4">
+        <DockPanel DockPanel.Dock="Bottom">
+            <ProgressBar
+                x:Name="pbIndicator"
+                Height="24"
+                Maximum="1"
+                Minimum="0"
+                Value="0" />
+        </DockPanel>
+        <StackPanel>
+            <GroupBox Header="Парсинг">
+                <UniformGrid Columns="4">
+                    <Button
+                        x:Name="btnSingleFromHtml"
+                        Click="btnSingleFromHtml_Click"
+                        Content="Парсинг HTML Markup" />
+                    <Button
+                        x:Name="btnParse"
+                        Click="btnParse_Click"
+                        Content="Через поиск моделей из файла" />
+                    <Button
+                        x:Name="btnParseFile"
+                        Click="btnParseFile_Click"
+                        Content="Через ссылки на товары из файла" />
+                    <Button
+                        x:Name="btnParseBrand"
+                        Click="btnParseBrand_Click"
+                        Content="Отдельный бренд" />
+                </UniformGrid>
+            </GroupBox>
+            <UniformGrid Columns="1">
+                <Button
+                    x:Name="btnDownloadResources"
+                    Click="btnDownloadResources_Click"
+                    Content="Скачать ресурсы"
+                    DockPanel.Dock="Left" />
+            </UniformGrid>
+            <UniformGrid Columns="3">
+                <Button
+                    x:Name="btnExportGeneral"
+                    Click="btnExportGeneral_Click"
+                    Content="Товары" />
+                <Button
+                    x:Name="btnAdditionalImages"
+                    Click="btnAdditionalImages_Click"
+                    Content="Доп. изображения" />
+                <Button
+                    x:Name="btnFillDescriptions"
+                    Click="btnFillDescriptions_Click"
+                    Content="Заполнить описания" />
+            </UniformGrid>
+            <UniformGrid Columns="7">
+                <Button
+                    x:Name="btnGetPdf"
+                    Click="btnGetPdf_Click"
+                    Content="PDF (SQL)" />
+
+                <Button
+                    x:Name="btnGosreetr"
+                    Click="btnGosreetr_Click"
+                    Content="Госреестр (SQL)" />
+                <Button
+                    x:Name="btnGetDimensions"
+                    Click="btnGetDimensions_Click"
+                    Content="Габариты (SQL)" />
+                <Button
+                    x:Name="btnDescEquip"
+                    Click="btnDescEquip_Click"
+                    Content="Desc+Compl(SQL)" />
+                <Button
+                    x:Name="btnImagesSql"
+                    Click="btnImagesSql_Click"
+                    Content="Images(SQL)" />
+                <Button
+                    x:Name="btnGetModelRanges"
+                    Click="btnGetModelRanges_Click"
+                    Content="ModelRange (SQL)"
+                    IsEnabled="False" />
+                <Button
+                    x:Name="btnGetAccessories"
+                    Click="btnGetAccessories_Click"
+                    Content="Accessories (SQL)"
+                    IsEnabled="False" />
+                <Button
+                    x:Name="btnGetZondes"
+                    Click="btnGetZondes_Click"
+                    Content="Probes (SQL)"
+                    IsEnabled="False" />
+            </UniformGrid>
+            <UniformGrid Columns="2">
+                <Button
+                    x:Name="btnGetCategories"
+                    Click="btnGetCategories_Click"
+                    Content="Список категорий" />
+                <Button
+                    x:Name="btnGetCategoriesProducts"
+                    Click="btnGetCategoriesProducts_Click"
+                    Content="Товары в категории" />
+            </UniformGrid>
+        </StackPanel>
+    </DockPanel>
+</Window>
