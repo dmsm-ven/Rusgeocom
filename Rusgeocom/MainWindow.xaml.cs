@@ -31,7 +31,8 @@ namespace Rusgeocom
                     return id;
                 }
                 throw new ArgumentOutOfRangeException("Стартовый ID не выбран");
-            }); ;
+            });
+
         }
 
         private async void btnParse_Click(object sender, RoutedEventArgs e)
@@ -211,6 +212,11 @@ namespace Rusgeocom
                 btnSingleFromHtml.IsEnabled = true;
                 SystemSounds.Exclamation.Play();
             }
+        }
+
+        private void Window_Loaded(object sender, RoutedEventArgs e)
+        {
+            MessageBox.Show("Перенести на .NET 10 , этот проект legacy .net framework 4.7", "INFO", MessageBoxButton.OK, MessageBoxImage.Asterisk);
         }
     }
 }

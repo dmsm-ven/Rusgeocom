@@ -179,7 +179,7 @@ namespace Rusgeocom.ParserLib
                 }
 
                 //Характеристики
-                ParseCharacteristics(product, doc);
+                await ParseCharacteristics(product, doc);
 
                 //Изображения
                 if (doc.DocumentNode.SelectSingleNode("//div[@class='product-images__thumbs-list']//img") != null)
@@ -272,7 +272,7 @@ namespace Rusgeocom.ParserLib
                 {
                     var chars = charTable.SelectNodes("//tr").Select(tr => new Characteristic()
                     {
-                        Group = "Основные характеристики"
+                        Group = "Основные характеристики",
                         Name = tr.SelectSingleNode("./th[1]")?.InnerText.TrimHtml(),
                         Value = tr.SelectSingleNode("./td[1]")?.InnerText.TrimHtml(),
                     })
@@ -282,14 +282,23 @@ namespace Rusgeocom.ParserLib
                     product.Characteristics.AddRange(chars);
 
                     var dimensionsChar = chars.FirstOrDefault(c => c.Name == "Размеры");
-                    if (dimensionsChar != null)
+                    var weightChar = chars.FirstOrDefault(c => c.Name == "Вес");
+
+                    var dimMatch = Regex.Match(dimensionsChar?.Value ?? "", @"(\d+) ?x ?(\d+) ?x ?(\d+) ?мм");
+                    var weightMatch = Regex.Match(weightChar?.Value ?? "", @"(\d+(\.\d+)?) ?кг");
+
+                    decimal weight = 0;
+                    if (weightMatch.Success && decimal.TryParse(weightMatch.Groups[1].Value.Replace(".", ","), out weight))
                     {
-                        var dimMatch = Regex.Match(dimensionsChar.Value, @"(\d+) x (\d+) x (\d+) мм");
-                        if (dimMatch.Success)
-                        {
-                            product.Dimensions = new ProductDimensions(int.Parse(dimMatch.Groups[1], dimMatch.Groups[2], dimMatch.Groups[3]));
-                        }
+
                     }
+                    product.Dimensions = new ProductDimensions()
+                    {
+                        Length = dimMatch.Success ? int.Parse(dimMatch.Groups[1].Value) : 0,
+                        Width = dimMatch.Success ? int.Parse(dimMatch.Groups[2].Value) : 0,
+                        Height = dimMatch.Success ? int.Parse(dimMatch.Groups[3].Value) : 0,
+                        Weight = weight
+                    };
                 }
 
             }

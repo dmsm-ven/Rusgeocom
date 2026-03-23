@@ -31,8 +31,6 @@ namespace Rusgeocom.ParserLib
         public string Sku { get; set; }
         public string Code { get; set; }
         public string DescriptionMarkup { get; set; }
-
-
         public decimal? Weight { get; set; }
         public string EAN { get; set; }
 
@@ -43,9 +41,8 @@ namespace Rusgeocom.ParserLib
         public List<string> ProbeCodes { get; set; } = new List<string>();
         public List<string> ModelRangeCodes { get; set; } = new List<string>();
         public List<string> ComplectationItems { get; set; } = new List<string>();
-
-
         public List<Characteristic> Characteristics { get; set; } = new List<Characteristic>();
+        public ProductDimensions Dimensions { get; set; } = new ProductDimensions();
         public string Gosreestr { get; set; }
         public bool IsParsed { get; set; }
     }

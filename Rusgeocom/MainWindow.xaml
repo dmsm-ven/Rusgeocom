@@ -6,6 +6,7 @@
     xmlns:local="clr-namespace:Rusgeocom"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
     Title="RGK(РусГеоКом) парсер"
+    Loaded="Window_Loaded"
     Width="800"
     
     Height="450"

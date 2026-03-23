@@ -1,9 +1,10 @@
-﻿namespace Rusgeocom;
-
-public class ProductDimensions
+﻿namespace Rusgeocom
 {
-    public int Length { get; set; }
-    public int Width { get; set; }
-    public int Height { get; set; }
-    public decimal Weight { get; set; }
+    public class ProductDimensions
+    {
+        public int Length { get; set; }
+        public int Width { get; set; }
+        public int Height { get; set; }
+        public decimal Weight { get; set; }
+    }
 }
