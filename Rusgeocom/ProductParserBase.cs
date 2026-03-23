@@ -11,7 +11,7 @@ namespace Rusgeocom.ParserLib
 {
     public abstract class ProductParserBase
     {
-        private readonly HttpClient client;
+        protected readonly HttpClient client;
         protected readonly Lazy<IWebDriver> driver = new Lazy<IWebDriver>(() =>
         {
             var options = new ChromeOptions();

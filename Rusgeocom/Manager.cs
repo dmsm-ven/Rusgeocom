@@ -12,13 +12,14 @@ namespace Rusgeocom.ParserLib
 {
     public class Manager
     {
+        private readonly string loggerFileName = "errors.txt";
         private readonly JsonSerializerSettings settings;
         private readonly ProductParserNewVersion parser;
+        private readonly ResourceDownloader resourceDownloader;
         private readonly string _storageFile;
         private readonly HttpClient client;
         private readonly Formatter formatter;
         private List<Product> products;
-        private readonly string loggerFileName = "errors.txt";
 
         public Manager(string storageFile, Func<int> startIdResolver)
         {
@@ -37,6 +38,8 @@ namespace Rusgeocom.ParserLib
 
             client = new HttpClient(new HttpClientHandler() { CookieContainer = new CookieContainer(), AllowAutoRedirect = true });
             client.Timeout = TimeSpan.FromMinutes(3);
+
+            this.resourceDownloader = new ResourceDownloader(parser.GetClient);
         }
 
         public async Task Parse(IProgress<double> indicator, string skuToParseFile)
@@ -80,86 +83,9 @@ namespace Rusgeocom.ParserLib
             return formatter.GetAdditionalImagesExport();
         }
 
-        public void FillDescription(string fileName)
+        public async Task DownloadResource(IProgress<double> indicator)
         {
-            formatter.FillDescription(fileName);
-        }
-
-        public async Task DownloadResource(string folder, IProgress<double> indicator)
-        {
-            int total = products.Count;
-            int current = 0;
-
-            foreach (var product in products)
-            {
-
-                try
-                {
-                    await DownloadProductResources(folder, product);
-                }
-                catch
-                {
-                    throw;
-                }
-
-                indicator?.Report((double)++current / total);
-            }
-
-        }
-
-        private async Task DownloadProductResources(string folder, Product product)
-        {
-
-            if (product.Images != null)
-            {
-                int sort_order = 1;
-                foreach (var image in product.Images)
-                {
-                    string localPath = Path.Combine(folder, product.manufacturer_ftp_path, "products", $"{product.Sku}_{sort_order++}{Path.GetExtension(image)}");
-
-                    if (!File.Exists(localPath))
-                    {
-                        var dir = Path.GetDirectoryName(localPath);
-                        if (!Directory.Exists(dir))
-                        {
-                            Directory.CreateDirectory(dir);
-                        }
-                        try
-                        {
-                            await (new WebClient().DownloadFileTaskAsync(image, localPath));
-                        }
-                        catch
-                        {
-                            //throw;
-                        }
-                    }
-                }
-            }
-
-            /*if (product.Instructions != null)
-            {
-                foreach (var pdf in product.Instructions)
-                {
-                    string localPath = Path.Combine(folder, product.manufacturer_ftp_path, "pdf", pdf.Uri.CreateMD5() + Path.GetExtension(pdf.Uri));
-
-                    if (!File.Exists(localPath))
-                    {
-                        var dir = Path.GetDirectoryName(localPath);
-                        if (!Directory.Exists(dir))
-                        {
-                            Directory.CreateDirectory(dir);
-                        }
-                        try
-                        {
-                            await (new WebClient().DownloadFileTaskAsync(pdf.Uri, localPath));
-                        }
-                        catch
-                        {
-                            throw;
-                        }
-                    }
-                }
-            }*/
+            await resourceDownloader.DownloadResource(this.products, indicator);
         }
 
         internal string GetDescriptionAndEquipmentSql()
@@ -233,7 +159,7 @@ namespace Rusgeocom.ParserLib
         internal async Task<string> ParseSingleProductFromHtml(string rawHtml)
         {
             var product = await parser.ParseSingleFromHtml(rawHtml);
-            await DownloadProductResources(@"C:\Users\user\Downloads", product);
+            await resourceDownloader.DownloadProductResources(product);
             return formatter.GetDescriptionAndEquipmentSql(product);
         }
     }

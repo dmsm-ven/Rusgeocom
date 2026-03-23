@@ -3,6 +3,7 @@ using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Linq;
+using System.Net.Http;
 using System.Text.RegularExpressions;
 using System.Threading.Tasks;
 using System.Web;
@@ -13,6 +14,8 @@ namespace Rusgeocom.ParserLib
     {
         private readonly string SPB_HOST = "https://spb.rusgeocom.ru";
         private readonly Action<string> logger;
+
+        public HttpClient GetClient => this.client;
 
         public ProductParserNewVersion(Action<string> logger)
         {
@@ -54,11 +57,17 @@ namespace Rusgeocom.ParserLib
 
                 list.Add(product);
 
+                //break;
+
+                await Task.Delay(GetRandomDelay());
+
                 indicator?.Report((double)++current / total);
             }
 
             return list;
         }
+
+        private TimeSpan GetRandomDelay() => TimeSpan.FromMilliseconds(new Random().Next(1000, 5000)); // 1-5 sec
 
         public async Task<List<Product>> ParseUrls(IEnumerable<string> urls, IProgress<double> indicator)
         {
@@ -69,7 +78,6 @@ namespace Rusgeocom.ParserLib
             foreach (Product product in products)
             {
                 await ParseProductDetails(product, ignoreSearchSkuCondition: true);
-
                 indicator?.Report((double)++current / total);
             }
 
@@ -285,7 +293,7 @@ namespace Rusgeocom.ParserLib
                     var weightChar = chars.FirstOrDefault(c => c.Name == "Вес");
 
                     var dimMatch = Regex.Match(dimensionsChar?.Value ?? "", @"(\d+) ?x ?(\d+) ?x ?(\d+) ?мм");
-                    var weightMatch = Regex.Match(weightChar?.Value ?? "", @"(\d+(\.\d+)?) ?кг");
+                    var weightMatch = Regex.Match(weightChar?.Value ?? "", @"(\d+([\.|,]\d+)?) ?кг");
 
                     decimal weight = 0;
                     if (weightMatch.Success && decimal.TryParse(weightMatch.Groups[1].Value.Replace(".", ","), out weight))

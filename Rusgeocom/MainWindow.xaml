@@ -63,10 +63,6 @@
                     x:Name="btnAdditionalImages"
                     Click="btnAdditionalImages_Click"
                     Content="Доп. изображения" />
-                <Button
-                    x:Name="btnFillDescriptions"
-                    Click="btnFillDescriptions_Click"
-                    Content="Заполнить описания" />
             </UniformGrid>
             <UniformGrid Columns="7">
                 <Button

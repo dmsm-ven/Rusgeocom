@@ -105,6 +105,7 @@
     </ApplicationDefinition>
     <Compile Include="ProductDimensions.cs" />
     <Compile Include="ProductParserBase.cs" />
+    <Compile Include="ResourceDownloader.cs" />
     <Compile Include="StartProductIdWindow.xaml.cs">
       <DependentUpon>StartProductIdWindow.xaml</DependentUpon>
     </Compile>

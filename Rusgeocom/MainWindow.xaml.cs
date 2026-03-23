@@ -1,6 +1,5 @@
 ﻿using Rusgeocom.ParserLib;
 using System;
-using System.IO;
 using System.Media;
 using System.Windows;
 
@@ -96,13 +95,7 @@ namespace Rusgeocom
         {
             IsEnabled = false;
 
-            string resourceFolder = Path.Combine(Path.GetDirectoryName(this.GetType().Assembly.Location), "downloads");
-            if (!Directory.Exists(resourceFolder))
-            {
-                Directory.CreateDirectory(resourceFolder);
-            }
-
-            await manager.DownloadResource(resourceFolder, new Progress<double>(v => pbIndicator.Value = v));
+            await manager.DownloadResource(new Progress<double>(v => pbIndicator.Value = v));
 
             IsEnabled = true;
 
@@ -112,21 +105,14 @@ namespace Rusgeocom
         {
             string data = manager.GetGeneralExport();
             Clipboard.SetText(data);
+            MessageBox.Show("Все изображения должны быть преобразованы в .jpg!", "INFO", MessageBoxButton.OK, MessageBoxImage.Asterisk);
         }
 
         private void btnAdditionalImages_Click(object sender, RoutedEventArgs e)
         {
             string data = manager.GetAdditionalImagesExport();
             Clipboard.SetText(data);
-        }
-
-        private void btnFillDescriptions_Click(object sender, RoutedEventArgs e)
-        {
-            var ofd = new Microsoft.Win32.OpenFileDialog();
-            if (ofd.ShowDialog() == true)
-            {
-                manager.FillDescription(ofd.FileName);
-            }
+            MessageBox.Show("Все изображения должны быть преобразованы в .jpg!", "INFO", MessageBoxButton.OK, MessageBoxImage.Asterisk);
         }
 
         private void btnGetModelRanges_Click(object sender, RoutedEventArgs e)

@@ -1,8 +1,6 @@
 ﻿using HtmlAgilityPack;
 using System;
 using System.Collections.Generic;
-using System.Diagnostics;
-using System.Globalization;
 using System.IO;
 using System.Linq;
 using System.Text;
@@ -73,7 +71,7 @@ namespace Rusgeocom.ParserLib
                     .AppendTab(string.Empty)   //date_added
                     .AppendTab(string.Empty)   //date_modified
                     .AppendTab(string.Empty)   //date_available
-                    .AppendTab(product.Weight.HasValue ? product.Weight.Value.ToString("F4", new CultureInfo("en-EN")) : string.Empty)   //weight
+                    .AppendTab("0")   //weight
                     .AppendTab("kg")   //weight_unit
                     .AppendTab("0")    //length
                     .AppendTab("0")    //width
@@ -99,7 +97,6 @@ namespace Rusgeocom.ParserLib
                     .AppendLine("1"); //minimum
 
                 id++;
-
             }
 
             var result = sb.ToString();
@@ -282,7 +279,7 @@ namespace Rusgeocom.ParserLib
                 int sort_order = 0;
                 foreach (var image in product.Images.Skip(1))
                 {
-                    string imagePath = $"catalog/{product.manufacturer_ftp_path}/products/" + image.CreateMD5() + Path.GetExtension(image);
+                    string imagePath = $"catalog/{product.manufacturer_ftp_path}/products/{product.Sku}_{++sort_order}.jpg";
                     sb.AppendLine($"{id}\t{imagePath}\t{sort_order++}");
                 }
 
@@ -293,19 +290,12 @@ namespace Rusgeocom.ParserLib
             return result;
         }
 
-        internal void FillDescription(string fileName)
-        {
-            var lines = products.Select(p => BuildDescription(p)).ToList();
-            var filler = new ExcelFileLinesReader();
-            filler.WriteLines(fileName, lines, 2, 30, 1);
-        }
-
         private string GetMainImage(Product product)
         {
             var firstImage = product.Images.FirstOrDefault();
             if (firstImage != null)
             {
-                return $"catalog/{product.manufacturer_ftp_path}/products/" + firstImage.CreateMD5() + Path.GetExtension(firstImage);
+                return $"catalog/{product.manufacturer_ftp_path}/products/{product.Sku}_1.jpg";
             }
             else
             {
@@ -403,96 +393,33 @@ namespace Rusgeocom.ParserLib
             return result;
         }
 
-        private string GetPidSelect(Product product)
+        private string GetPidSelect(Product product, bool partial = false)
         {
-            return $"(SELECT product_id FROM oc_product WHERE sku = '{product.Sku}' OR model = '{product.Sku}' AND product_id >= {START_ETK_ID.Value} LIMIT 1)";
+            if (partial)
+            {
+                return $"WHERE product_id >= {START_ETK_ID.Value} AND (sku = '{product.Sku}' OR model = '{product.Sku}') ";
+            }
+            return $"(SELECT product_id FROM oc_product WHERE product_id >= {START_ETK_ID.Value} AND (sku = '{product.Sku}' OR model = '{product.Sku}') LIMIT 1)";
         }
 
         internal string GetDimensionsSql()
         {
             var sb = new StringBuilder();
-            foreach (var product in products.Where(p => p.Characteristics.Any()))
+            foreach (var product in products)
             {
-                var source = product.Characteristics.Where(p => !string.IsNullOrWhiteSpace(p.Name) && !string.IsNullOrWhiteSpace(p.Value));
-
-                var dimensionChar = source
-                    .FirstOrDefault(c => c.Name.StartsWith("Размер"));
-                var weightChar = source
-                    .FirstOrDefault(c => c.Name.StartsWith("Масса") || c.Name.StartsWith("Вес"));
-                string product_id = $"(SELECT product_id FROM oc_product WHERE sku = '{product.Sku}' OR model = '{product.Sku}' AND product_id >= {START_ETK_ID.Value} LIMIT 1)";
-
-                if (dimensionChar != null)
+                if (product.Dimensions.NotEmpty)
                 {
-                    try
-                    {
-                        ParseDimensions(sb, dimensionChar, product_id);
-                    }
-                    catch
-                    {
-                        throw;
-                    }
-                }
-
-                if (weightChar != null)
-                {
-                    try
-                    {
-                        ParseWeight(sb, weightChar, product_id);
-                    }
-                    catch
-                    {
-                        throw;
-                    }
+                    sb.Append("UPDATE oc_product SET ");
+                    sb.Append($"length = {product.Dimensions.Length.ToString().Replace(",", ".")}, ");
+                    sb.Append($"width = {product.Dimensions.Width.ToString().Replace(",", ".")}, ");
+                    sb.Append($"height = {product.Dimensions.Height.ToString().Replace(",", ".")}, ");
+                    sb.Append($"weight = {product.Dimensions.Weight.ToString().Replace(",", ".")}");
+                    sb.AppendLine($" {GetPidSelect(product, partial: true)};");
                 }
             }
 
             var result = sb.ToString().TrimHtml().Trim(',') + ";";
             return result;
-        }
-
-        private static void ParseDimensions(StringBuilder sb, Characteristic dimensionChar, string product_id)
-        {
-            var dimensions = Regex.Matches(dimensionChar.Value, @"\d+");
-            if (dimensions.Count == 3 && !dimensionChar.Value.Contains("см"))
-            {
-                if (int.TryParse(dimensions[0].Value, out var length) &&
-                    int.TryParse(dimensions[1].Value, out var width) &&
-                    int.TryParse(dimensions[2].Value, out var height))
-                {
-                    sb.Append($"UPDATE oc_product SET ");
-                    sb.Append($"length = '{length.ToString("F0")}', ");
-                    sb.Append($"width = '{width.ToString("F0")}', ");
-                    sb.Append($"height = '{height.ToString("F0")}' ");
-                    sb.AppendLine($"WHERE product_id = {product_id};");
-                }
-            }
-            else
-            {
-                Debug.WriteLine($"Ошибка парсинга строки габаритов: {dimensionChar.Value}");
-            }
-        }
-
-        private static void ParseWeight(StringBuilder sb, Characteristic weightChar, string product_id)
-        {
-            var m = Regex.Match(weightChar.Value, @"^((\d+)([,.][0-9]{1,2})?) (кг|г)$");
-
-            if (m.Success)
-            {
-                decimal weight = decimal.Parse(m.Groups[1].Value.Replace(".", ","));
-                if (m.Groups[4].Value == "г")
-                {
-                    Debug.WriteLine($"Перевод грамм в кг: {weight} = {(weight / 1000).ToString("F2")}");
-                    weight /= 1000;
-                }
-
-                sb.Append($"UPDATE oc_product SET weight = '{weight.ToString("F2").Replace(",", ".")}' ");
-                sb.AppendLine($"WHERE product_id = {product_id};");
-
-            }
-            else
-            {
-                Debug.WriteLine($"Ошибка парсинга строки веса: {weightChar.Value}");
-            }
         }
 
         internal string GetImagesSql()
@@ -501,7 +428,7 @@ namespace Rusgeocom.ParserLib
 
             foreach (var product in products)
             {
-                int sort_order = 0;
+                int sort_order = 1;
 
                 if (product.Images.Count == 0)
                 {
@@ -510,17 +437,18 @@ namespace Rusgeocom.ParserLib
 
                 var firstImage = product.Images.First();
 
-                string imagePath = $"catalog/{product.manufacturer_ftp_path}/products/" + firstImage.CreateMD5() + Path.GetExtension(firstImage);
-                string pid = GetPidSelect(product);
+                string imagePath = $"catalog/{product.manufacturer_ftp_path}/products/{product.Sku}_1.jpg";
+                string pidPartial = GetPidSelect(product, partial: true);
+                string pidFull = GetPidSelect(product, partial: false);
 
-                sb.AppendLine($"UPDATE IGNORE oc_product SET image = '{imagePath}' WHERE product_id = {pid};");
+                sb.AppendLine($"UPDATE IGNORE oc_product SET image = '{imagePath}' {pidPartial};");
 
                 if (product.Images.Count > 1)
                 {
                     foreach (var image in product.Images.Skip(1))
                     {
-                        imagePath = $"catalog/{product.manufacturer_ftp_path}/products/" + image.CreateMD5() + Path.GetExtension(image);
-                        sb.AppendLine($"INSERT IGNORE INTO oc_product_image (product_id, image, sort_order) VALUES ({pid}, '{imagePath}', {sort_order++});");
+                        imagePath = $"catalog/{product.manufacturer_ftp_path}/products/{product.Sku}_{sort_order++}.jpg";
+                        sb.AppendLine($"INSERT IGNORE INTO oc_product_image (product_id, image, sort_order) VALUES ({pidFull}, '{imagePath}', {sort_order});");
                     }
                 }
 
