@@ -103,6 +103,7 @@
       <Generator>MSBuild:Compile</Generator>
       <SubType>Designer</SubType>
     </ApplicationDefinition>
+    <Compile Include="ProductDimensions.cs" />
     <Compile Include="ProductParserBase.cs" />
     <Compile Include="StartProductIdWindow.xaml.cs">
       <DependentUpon>StartProductIdWindow.xaml</DependentUpon>

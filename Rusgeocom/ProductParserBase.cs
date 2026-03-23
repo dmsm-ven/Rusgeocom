@@ -28,8 +28,8 @@ namespace Rusgeocom.ParserLib
                 { "accept", "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7" },
                 { "accept-encoding", "gzip, deflate, br, zstd" },
                 { "accept-language", "en-US,en;q=0.9,ru-RU;q=0.8,ru;q=0.7" },
-                { "user-agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/137.0.0.0 Safari/537.36" },
-                { "sec-ch-ua", "\"Not)A;Brand\";v=\"8\", \"Chromium\";v=\"137\", \"Google Chrome\";v=\"137\"" },
+                { "user-agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/146.0.0.0 Safari/537.36" },
+                { "sec-ch-ua", "\"Chromium\";v=\"146\", \"Not-A.Brand\";v=\"24\", \"Google Chrome\";v=\"146\"" },
             };
 
         public ProductParserBase()
@@ -54,6 +54,19 @@ namespace Rusgeocom.ParserLib
         {
             try
             {
+                var doc = new HtmlDocument();
+                var response = await client.GetAsync(uri);
+                var html = await response.Content.ReadAsStringAsync();
+                doc.LoadHtml(html);
+                return doc;
+            }
+            catch
+            {
+                throw;
+            }
+            /*
+            try
+            {
                 driver.Value.Navigate().GoToUrl(uri);
                 var doc = new HtmlDocument();
                 doc.LoadHtml(driver.Value.PageSource);
@@ -64,6 +77,7 @@ namespace Rusgeocom.ParserLib
                 Console.WriteLine($"Error loading document using Selenium: {ex.Message}");
                 return null;
             }
+            */
         }
     }
 }

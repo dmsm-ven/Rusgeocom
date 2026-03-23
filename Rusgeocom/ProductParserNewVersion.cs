@@ -118,10 +118,10 @@ namespace Rusgeocom.ParserLib
             var uri = $"{SPB_HOST}/search?search_string={HttpUtility.UrlEncode(product.SearchSku)}";
             var doc = await GetDocument(uri);
 
-            //product.Uri = GetCurrentUri();
-            throw new NotImplementedException();
+            product.Uri = doc.DocumentNode.SelectSingleNode("/html/head/meta[@property='og:url']")?.GetAttributeValue("content", "");
 
-            //return doc;
+
+            return doc;
         }
 
         private async Task ParseProductDetails(Product product, bool ignoreSearchSkuCondition = false, string rawHtml = "")
@@ -146,7 +146,7 @@ namespace Rusgeocom.ParserLib
             {
                 product.Name = doc.DocumentNode.SelectSingleNode("//h1")?.InnerText.TrimHtml();
                 product.Manufacturer = doc.DocumentNode.SelectSingleNode("//div[@itemprop='brand']/meta")?.GetAttributeValue("content", null);
-                product.Code = doc.DocumentNode.SelectSingleNode("//div[@class='product-code__item']")?.InnerText.Replace("Код товара", string.Empty).TrimHtml();
+                product.Code = doc.DocumentNode.SelectSingleNode("//span[@class='product-header__bottom-text' and contains(text(), 'Код товара ')]")?.InnerText.Replace("Код товара", string.Empty).TrimHtml();
                 product.Sku = doc.DocumentNode.SelectSingleNode("//span[@class='product-header__bottom-text' and contains(text(), 'Артикул ')]")?.InnerText.Replace("Артикул ", string.Empty).Trim();
                 product.Gosreestr = ParseMainCharacteristic("Госреестр", doc);
 
@@ -157,8 +157,8 @@ namespace Rusgeocom.ParserLib
 
                 if (!ignoreSearchSkuCondition)
                 {
-                    var conditionA = product.Sku.Equals(product.SearchSku, StringComparison.OrdinalIgnoreCase);
-                    var conditionB = product.Code.Equals(product.SearchSku, StringComparison.OrdinalIgnoreCase);
+                    var conditionA = product.Sku != null && product.Sku.Equals(product.SearchSku, StringComparison.OrdinalIgnoreCase);
+                    var conditionB = product.Code != null && product.Code.Equals(product.SearchSku, StringComparison.OrdinalIgnoreCase);
 
                     if (!conditionA && !conditionB)
                     {
@@ -267,35 +267,27 @@ namespace Rusgeocom.ParserLib
         {
             try
             {
-                string htmlNode = Regex.Match(doc.DocumentNode.InnerHtml, ",characteristics:\"(.*?)\",shortCharacteristics")?.Groups[1].Value;
-                string decodedUnicode = Regex.Unescape(htmlNode);
-                HtmlNode techTableNode = HtmlNode.CreateNode(decodedUnicode);
-
-                if (techTableNode != null)
+                var charTable = doc.DocumentNode.SelectSingleNode("//div[@id='characteristics']/div/table");
+                if (charTable != null)
                 {
-                    var charRow = techTableNode
-                        .SelectNodes("//tbody//tr")
-                        .ToList();
-
-                    var groupName = "";
-                    foreach (var row in charRow)
+                    var chars = charTable.SelectNodes("//tr").Select(tr => new Characteristic()
                     {
-                        if (row.HasClass("tech_item"))
+                        Group = "Основные характеристики"
+                        Name = tr.SelectSingleNode("./th[1]")?.InnerText.TrimHtml(),
+                        Value = tr.SelectSingleNode("./td[1]")?.InnerText.TrimHtml(),
+                    })
+                        .Where(characteristic => !string.IsNullOrWhiteSpace(characteristic.Name) && !string.IsNullOrWhiteSpace(characteristic.Value))
+                        .ToArray();
+
+                    product.Characteristics.AddRange(chars);
+
+                    var dimensionsChar = chars.FirstOrDefault(c => c.Name == "Размеры");
+                    if (dimensionsChar != null)
+                    {
+                        var dimMatch = Regex.Match(dimensionsChar.Value, @"(\d+) x (\d+) x (\d+) мм");
+                        if (dimMatch.Success)
                         {
-                            groupName = row?.InnerText.TrimHtml();
-                        }
-                        else
-                        {
-                            var ch = new Characteristic()
-                            {
-                                Group = groupName,
-                                Name = row.SelectSingleNode("./th")?.InnerText.TrimHtml(),
-                                Value = row.SelectSingleNode("./td")?.InnerText.TrimHtml(),
-                            };
-                            if (!string.IsNullOrWhiteSpace(ch.Name) && !string.IsNullOrWhiteSpace(ch.Value))
-                            {
-                                product.Characteristics.Add(ch);
-                            }
+                            product.Dimensions = new ProductDimensions(int.Parse(dimMatch.Groups[1], dimMatch.Groups[2], dimMatch.Groups[3]));
                         }
                     }
                 }

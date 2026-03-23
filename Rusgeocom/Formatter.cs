@@ -327,6 +327,7 @@ namespace Rusgeocom.ParserLib
                     doc.DocumentNode.SelectNodes("//img").ToList().ForEach(img => img.Remove());
                 }
 
+                string promoText = "";
                 if (doc.DocumentNode.SelectSingleNode("//p[contains(text(), 'Купить')]") != null)
                 {
                     doc.DocumentNode.SelectSingleNode("//p[contains(text(), 'Купить')]").Remove();
@@ -373,6 +374,7 @@ namespace Rusgeocom.ParserLib
 
             var result = sb.ToString()
                 .Replace("<p><p>", "<p>")
+                .Replace("<tr><th colspan=\"2\"><strong></strong></th></tr>", string.Empty)
                 .Replace("\r", string.Empty).TrimHtml();
 
             return result;
