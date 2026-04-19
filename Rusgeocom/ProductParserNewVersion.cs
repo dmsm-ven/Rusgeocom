@@ -289,10 +289,10 @@ namespace Rusgeocom.ParserLib
 
                     product.Characteristics.AddRange(chars);
 
-                    var dimensionsChar = chars.FirstOrDefault(c => c.Name == "Размеры");
-                    var weightChar = chars.FirstOrDefault(c => c.Name == "Вес");
+                    var dimensionsChar = chars.FirstOrDefault(c => c.Name == "Размеры" || c.Name == "Габариты");
+                    var weightChar = chars.FirstOrDefault(c => c.Name == "Вес" || c.Name == "Масса");
 
-                    var dimMatch = Regex.Match(dimensionsChar?.Value ?? "", @"(\d+) ?x ?(\d+) ?x ?(\d+) ?мм");
+                    var dimMatch = Regex.Match(dimensionsChar?.Value ?? "", @"(\d+) ?[x|x|х|х] ?(\d+) ?[x|x|х|х] ?(\d+) ?мм");
                     var weightMatch = Regex.Match(weightChar?.Value ?? "", @"(\d+([\.|,]\d+)?) ?кг");
 
                     decimal weight = 0;

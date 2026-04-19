@@ -276,11 +276,12 @@ namespace Rusgeocom.ParserLib
             int id = START_ETK_ID.Value;
             foreach (var product in products)
             {
-                int sort_order = 0;
+                int sort_order = 1;
                 foreach (var image in product.Images.Skip(1))
                 {
-                    string imagePath = $"catalog/{product.manufacturer_ftp_path}/products/{product.Sku}_{++sort_order}.jpg";
-                    sb.AppendLine($"{id}\t{imagePath}\t{sort_order++}");
+                    string imagePath = $"catalog/{product.manufacturer_ftp_path}/products/{product.Sku}_{sort_order}.jpg";
+                    sb.AppendLine($"{id}\t{imagePath}\t{sort_order}");
+                    sort_order++;
                 }
 
                 id++;
@@ -447,8 +448,9 @@ namespace Rusgeocom.ParserLib
                 {
                     foreach (var image in product.Images.Skip(1))
                     {
-                        imagePath = $"catalog/{product.manufacturer_ftp_path}/products/{product.Sku}_{sort_order++}.jpg";
+                        imagePath = $"catalog/{product.manufacturer_ftp_path}/products/{product.Sku}_{sort_order}.jpg";
                         sb.AppendLine($"INSERT IGNORE INTO oc_product_image (product_id, image, sort_order) VALUES ({pidFull}, '{imagePath}', {sort_order});");
+                        sort_order++;
                     }
                 }
 
