@@ -202,7 +202,7 @@ namespace Rusgeocom
 
         private void Window_Loaded(object sender, RoutedEventArgs e)
         {
-            MessageBox.Show("Перенести на .NET 10 , этот проект legacy .net framework 4.7", "INFO", MessageBoxButton.OK, MessageBoxImage.Asterisk);
+            MessageBox.Show("1)Проверить дубликаты (убрать первое изображение из дополнительных фото, т.к. оно дублируется). \r\n2) Перенести на .NET 10 , этот проект legacy .net framework 4.7", "INFO", MessageBoxButton.OK, MessageBoxImage.Asterisk);
         }
     }
 }
