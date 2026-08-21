@@ -1,5 +1,6 @@
 ﻿using Rusgeocom.ParserLib;
 using System;
+using System.Collections.Generic;
 using System.Media;
 using System.Windows;
 
@@ -202,7 +203,11 @@ namespace Rusgeocom
 
         private void Window_Loaded(object sender, RoutedEventArgs e)
         {
-            MessageBox.Show("1)Проверить дубликаты (убрать первое изображение из дополнительных фото, т.к. оно дублируется). \r\n2) Перенести на .NET 10 , этот проект legacy .net framework 4.7", "INFO", MessageBoxButton.OK, MessageBoxImage.Asterisk);
+            List<string> infoList = new List<string>();
+            infoList.Add("1) Перенести на .NET 10 , этот проект legacy .net framework 4.7");
+            infoList.Add("2) Переделать парсер на аналог того как для ВИ (копирование HTML с браузера, вставка SQL) т.к. в ручную слишком долго.");
+            infoList.Add("3) Сейчас изображения загружаются с помощью CNTRL+K на странице товара");
+            MessageBox.Show(string.Join(Environment.NewLine, infoList), "INFO", MessageBoxButton.OK, MessageBoxImage.Asterisk);
         }
     }
 }

@@ -159,7 +159,7 @@ namespace Rusgeocom.ParserLib
         internal async Task<string> ParseSingleProductFromHtml(string rawHtml)
         {
             var product = await parser.ParseSingleFromHtml(rawHtml);
-            await resourceDownloader.DownloadProductResources(product);
+            //await resourceDownloader.DownloadProductResources(product);
             return formatter.GetDescriptionAndEquipmentSql(product);
         }
     }

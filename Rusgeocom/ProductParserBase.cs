@@ -1,10 +1,8 @@
 ﻿using HtmlAgilityPack;
-using OpenQA.Selenium;
-using OpenQA.Selenium.Chrome;
 using System;
-using System.Collections.Generic;
 using System.Net;
 using System.Net.Http;
+using System.Net.Http.Headers;
 using System.Threading.Tasks;
 
 namespace Rusgeocom.ParserLib
@@ -12,43 +10,44 @@ namespace Rusgeocom.ParserLib
     public abstract class ProductParserBase
     {
         protected readonly HttpClient client;
-        protected readonly Lazy<IWebDriver> driver = new Lazy<IWebDriver>(() =>
-        {
-            var options = new ChromeOptions();
-            options.BrowserVersion = "137";
-            foreach (var header in headers)
-            {
-                options.AddArgument($"--{header.Key}={header.Value}");
-            }
-            return new ChromeDriver(options); // Example for Chrome
-        });
 
-        private static Dictionary<string, string> headers = new Dictionary<string, string>()
-            {
-                { "accept", "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7" },
-                { "accept-encoding", "gzip, deflate, br, zstd" },
-                { "accept-language", "en-US,en;q=0.9,ru-RU;q=0.8,ru;q=0.7" },
-                { "user-agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/146.0.0.0 Safari/537.36" },
-                { "sec-ch-ua", "\"Chromium\";v=\"146\", \"Not-A.Brand\";v=\"24\", \"Google Chrome\";v=\"146\"" },
-            };
 
         public ProductParserBase()
         {
-            client = new HttpClient(new HttpClientHandler()
+            // credentials: "include" означает, что нужны куки — используем CookieContainer
+            var cookieContainer = new CookieContainer();
+
+            var handler = new HttpClientHandler
             {
-                AllowAutoRedirect = true,
-                CookieContainer = new CookieContainer(),
+                CookieContainer = cookieContainer,
                 UseCookies = true,
-                AutomaticDecompression = DecompressionMethods.GZip | DecompressionMethods.Deflate
-            });
+                AllowAutoRedirect = true
+            };
 
-            foreach (var h in headers)
-            {
-                client.DefaultRequestHeaders.Add(h.Key, h.Value);
-            }
+            client = new HttpClient(handler);
+
+            client.DefaultRequestHeaders.Referrer = new Uri("https://www.rusgeocom.ru/products/lazernyj-dalnomer-leica-disto-d2-new");
+            // Заголовки
+            client.DefaultRequestHeaders.TryAddWithoutValidation("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7");
+            client.DefaultRequestHeaders.TryAddWithoutValidation("Accept-Language", "en-US,en;q=0.9,ru;q=0.8");
+            client.DefaultRequestHeaders.CacheControl = new CacheControlHeaderValue { NoCache = true };
+            client.DefaultRequestHeaders.Pragma.Add(new NameValueHeaderValue("no-cache"));
+            client.DefaultRequestHeaders.TryAddWithoutValidation("Priority", "u=0, i");
+            client.DefaultRequestHeaders.TryAddWithoutValidation("sec-ch-ua", "\"Not=A?Brand\";v=\"99\", \"Google Chrome\";v=\"151\", \"Chromium\";v=\"151\"");
+            client.DefaultRequestHeaders.TryAddWithoutValidation("sec-ch-ua-mobile", "?0");
+            client.DefaultRequestHeaders.TryAddWithoutValidation("sec-ch-ua-platform", "\"Windows\"");
+            client.DefaultRequestHeaders.TryAddWithoutValidation("Sec-Fetch-Dest", "document");
+            client.DefaultRequestHeaders.TryAddWithoutValidation("Sec-Fetch-Mode", "navigate");
+            client.DefaultRequestHeaders.TryAddWithoutValidation("Sec-Fetch-Site", "same-origin");
+            client.DefaultRequestHeaders.TryAddWithoutValidation("Sec-Fetch-User", "?1");
+            client.DefaultRequestHeaders.TryAddWithoutValidation("Upgrade-Insecure-Requests", "1");
+            client.DefaultRequestHeaders.TryAddWithoutValidation("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0.0.0 Safari/537.36");
+
+
+            // User-Agent — в fetch его не видно (браузер добавляет сам), но для C# обязательно нужно добавить вручную,
+            // иначе сервер сразу поймёт, что это не браузер
+
         }
-
-        protected string GetCurrentUri() => driver.Value.Url;
 
         protected async Task<HtmlDocument> GetDocument(string uri)
         {
@@ -64,20 +63,6 @@ namespace Rusgeocom.ParserLib
             {
                 throw;
             }
-            /*
-            try
-            {
-                driver.Value.Navigate().GoToUrl(uri);
-                var doc = new HtmlDocument();
-                doc.LoadHtml(driver.Value.PageSource);
-                return doc;
-            }
-            catch (Exception ex)
-            {
-                Console.WriteLine($"Error loading document using Selenium: {ex.Message}");
-                return null;
-            }
-            */
         }
     }
 }

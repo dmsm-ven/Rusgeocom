@@ -4,15 +4,16 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.Linq;
 using System.Net.Http;
+using System.Net.Http.Json;
+using System.Text.Json;
 using System.Text.RegularExpressions;
 using System.Threading.Tasks;
-using System.Web;
 
 namespace Rusgeocom.ParserLib
 {
     public class ProductParserNewVersion : ProductParserBase
     {
-        private readonly string SPB_HOST = "https://spb.rusgeocom.ru";
+        private readonly string SPB_HOST = "https://rusgeocom.ru";
         private readonly Action<string> logger;
 
         public HttpClient GetClient => this.client;
@@ -121,15 +122,35 @@ namespace Rusgeocom.ParserLib
             return list;
         }
 
-        private async Task<HtmlDocument> SearchProduct(Product product)
+        private async Task SearchProduct(Product product)
         {
-            var uri = $"{SPB_HOST}/search?search_string={HttpUtility.UrlEncode(product.SearchSku)}";
-            var doc = await GetDocument(uri);
+            var uri = $"{SPB_HOST}/api/search/header";
 
-            product.Uri = doc.DocumentNode.SelectSingleNode("/html/head/meta[@property='og:url']")?.GetAttributeValue("content", "");
+            var payload = new
+            {
+                query = product.Sku,
+                sectionId = ""
+            };
 
+            var response = await client.PostAsJsonAsync(uri, payload);
 
-            return doc;
+            response.EnsureSuccessStatusCode();
+
+            var responseContent = await response.Content.ReadAsStringAsync();
+
+            JsonDocument doc = JsonDocument.Parse(responseContent);
+
+            JsonElement root = doc.RootElement;
+
+            var firstProductUrl = root
+                .GetProperty("data")
+                .GetProperty("products")[0]
+                .GetProperty("url")
+                .GetString();
+
+            product.Uri = firstProductUrl;
+
+            doc.Dispose();
         }
 
         private async Task ParseProductDetails(Product product, bool ignoreSearchSkuCondition = false, string rawHtml = "")
