@@ -86,21 +86,6 @@
                     x:Name="btnImagesSql"
                     Click="btnImagesSql_Click"
                     Content="Images(SQL)" />
-                <Button
-                    x:Name="btnGetModelRanges"
-                    Click="btnGetModelRanges_Click"
-                    Content="ModelRange (SQL)"
-                    IsEnabled="False" />
-                <Button
-                    x:Name="btnGetAccessories"
-                    Click="btnGetAccessories_Click"
-                    Content="Accessories (SQL)"
-                    IsEnabled="False" />
-                <Button
-                    x:Name="btnGetZondes"
-                    Click="btnGetZondes_Click"
-                    Content="Probes (SQL)"
-                    IsEnabled="False" />
             </UniformGrid>
             <UniformGrid Columns="2">
                 <Button
