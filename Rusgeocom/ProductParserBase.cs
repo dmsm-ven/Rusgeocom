@@ -1,10 +1,8 @@
 ﻿using HtmlAgilityPack;
 using System;
-using System.Collections.Generic;
 using System.Net;
 using System.Net.Http;
 using System.Net.Http.Headers;
-using System.Threading;
 using System.Threading.Tasks;
 
 namespace Rusgeocom.ParserLib
@@ -13,23 +11,12 @@ namespace Rusgeocom.ParserLib
     {
         protected readonly HttpClient client;
 
-        private readonly CookieContainer cookieContainer = new CookieContainer();
-        private readonly HashSet<string> passedHosts = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        private readonly SemaphoreSlim browserCheckLock = new SemaphoreSlim(1, 1);
-
-        /// <summary>
-        /// true - проверка браузера проходится в скрытом Chromium (без окна), false - откроется окно браузера (удобно для отладки).
-        /// </summary>
-        public bool BrowserHeadless { get; set; } = true;
-
-        /// <summary>
-        /// CSS-селектор элемента, наличие которого означает, что проверка пройдена и открыта реальная страница сайта.
-        /// </summary>
-        public string BrowserReadySelector { get; set; } = BrowserSession.DEFAULT_READY_SELECTOR;
 
         public ProductParserBase()
         {
             // credentials: "include" означает, что нужны куки — используем CookieContainer
+            var cookieContainer = new CookieContainer();
+
             var handler = new HttpClientHandler
             {
                 CookieContainer = cookieContainer,
@@ -61,67 +48,6 @@ namespace Rusgeocom.ParserLib
             // User-Agent — в fetch его не видно (браузер добавляет сам), но для C# обязательно нужно добавить вручную,
             // иначе сервер сразу поймёт, что это не браузер
 
-        }
-
-        /// <summary>
-        /// Проходит проверку браузера (NGENIX) для хоста указанного адреса в настоящем Chromium
-        /// и передаёт полученные cookies и User-Agent в HttpClient. Для каждого хоста выполняется один раз за сессию.
-        /// </summary>
-        protected async Task EnsureBrowserSessionAsync(string url)
-        {
-            var host = new Uri(url).Host;
-
-            await browserCheckLock.WaitAsync();
-            try
-            {
-                lock (passedHosts)
-                {
-                    if (passedHosts.Contains(host))
-                    {
-                        return;
-                    }
-                }
-
-                var session = await BrowserSession.PassCheckAsync(url, BrowserHeadless, BrowserReadySelector);
-
-                foreach (var cookie in session.Cookies)
-                {
-                    try
-                    {
-                        cookieContainer.Add(cookie);
-                    }
-                    catch (CookieException)
-                    {
-                        // пропускаем cookie с недопустимыми символами - на работу сессии они не влияют
-                    }
-                }
-
-                // User-Agent должен совпадать с браузером, прошедшим проверку, иначе cookie может не приниматься
-                client.DefaultRequestHeaders.Remove("User-Agent");
-                client.DefaultRequestHeaders.TryAddWithoutValidation("User-Agent", session.UserAgent);
-                // версия Chrome в sec-ch-ua могла не совпасть с версией Chromium из Playwright
-                client.DefaultRequestHeaders.Remove("sec-ch-ua");
-
-                lock (passedHosts)
-                {
-                    passedHosts.Add(host);
-                }
-            }
-            finally
-            {
-                browserCheckLock.Release();
-            }
-        }
-
-        /// <summary>
-        /// Сбрасывает признак пройденной проверки: следующий запрос снова откроет браузер (например, если cookie протухла).
-        /// </summary>
-        public void ResetBrowserSession()
-        {
-            lock (passedHosts)
-            {
-                passedHosts.Clear();
-            }
         }
 
         protected async Task<HtmlDocument> GetDocument(string uri)
