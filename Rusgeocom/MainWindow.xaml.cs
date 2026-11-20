@@ -204,9 +204,9 @@ namespace Rusgeocom
         private void Window_Loaded(object sender, RoutedEventArgs e)
         {
             List<string> infoList = new List<string>();
-            infoList.Add("1) Перенести на .NET 10 , этот проект legacy .net framework 4.7");
-            infoList.Add("2) Переделать парсер на аналог того как для ВИ (копирование HTML с браузера, вставка SQL) т.к. в ручную слишком долго.");
-            infoList.Add("3) Сейчас изображения загружаются с помощью CNTRL+K на странице товара");
+            //infoList.Add("1) Перенести на .NET 10 , этот проект legacy .net framework 4.7");
+            infoList.Add("1) Переделать парсер на аналог того как для ВИ (копирование HTML с браузера, вставка SQL) т.к. в ручную слишком долго.");
+            infoList.Add("2) Сейчас изображения загружаются с помощью CNTRL+K на странице товара");
             MessageBox.Show(string.Join(Environment.NewLine, infoList), "INFO", MessageBoxButton.OK, MessageBoxImage.Asterisk);
         }
     }
