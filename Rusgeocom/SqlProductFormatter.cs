@@ -4,8 +4,12 @@ using System.Web;
 
 namespace Rusgeocom;
 
-public class SqlProductFormatter()
+public class SqlProductFormatter(string? yandexDiskRootUri)
 {
+    /// <summary>PDF попадают в SQL только если задан корень Яндекс.Диска (secrets.json) и известен бренд.</summary>
+    public bool CanGeneratePdfSql(RusgeocomParser parser) =>
+        !string.IsNullOrWhiteSpace(yandexDiskRootUri) && !string.IsNullOrEmpty(parser.LastBrandFolder);
+
     public string GenerateSqlForLastParsedProduct(RusgeocomParser parser, string manufacturerFolder)
     {
         var sb = new StringBuilder();
@@ -29,6 +33,16 @@ public class SqlProductFormatter()
                 }
                 sb.Remove(sb.Length - 3, 3);
                 sb.AppendLine(";");
+            }
+        }
+
+        //Руководства по эксплуатации (файлы на Яндекс.Диске: {корень}/{бренд}/{файл})
+        if (CanGeneratePdfSql(parser))
+        {
+            foreach (var pdf in parser.LastPdfData)
+            {
+                string path = $"{yandexDiskRootUri!.TrimEnd('/')}/{parser.LastBrandFolder}/{pdf.FileName}";
+                sb.AppendLine($"INSERT INTO oc_product_pdf (product_id, name, path) VALUES ((SELECT product_id FROM oc_product WHERE sku = '{parser.LastModelData}' LIMIT 1), '{pdf.Name}', '{path}');");
             }
         }
 

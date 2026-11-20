@@ -14,16 +14,18 @@ public partial class MainWindow : Window
     private const string downloadFolder = @"C:\Users\user\Downloads";
     private readonly string imageResizerExeDir;
     private readonly RusgeocomParser parser = new(downloadFolder);
-    private readonly SqlProductFormatter sqlFormatter = new();
+    private readonly SqlProductFormatter sqlFormatter;
     private readonly FtpUploader ftpUploader;
     private readonly DbQueryRunner dbQueryRunner;
     private readonly ObservableCollection<string> logItems = new();
     public MainWindow()
     {
         InitializeComponent();
+        var configuration = App.AppHost.Services.GetRequiredService<IConfiguration>();
         ftpUploader = App.AppHost.Services.GetRequiredService<FtpUploader>();
         dbQueryRunner = App.AppHost.Services.GetRequiredService<DbQueryRunner>();
-        imageResizerExeDir = App.AppHost.Services.GetRequiredService<IConfiguration>()["ImageResizerExeDir"];
+        imageResizerExeDir = configuration["ImageResizerExeDir"];
+        sqlFormatter = new SqlProductFormatter(configuration["YandexDiskRootUri"]);
         lbLogs.ItemsSource = logItems;
 
     }
@@ -42,6 +44,16 @@ public partial class MainWindow : Window
                 this.AddLogEntry(v);
             }));
             txtModelName.Text = parser.LastModelData;
+
+            // путь до папки с изображениями бренда подставляется автоматически: catalog/{бренд}/products
+            if (!string.IsNullOrEmpty(parser.LastBrandFolder))
+            {
+                txtImageManufacturerPath.Text = $"catalog/{parser.LastBrandFolder}/products";
+            }
+            else
+            {
+                AddLogEntry("Бренд не найден на странице, путь до папки с изображениями не изменён");
+            }
         }
         catch (FormatException)
         {
@@ -60,6 +72,10 @@ public partial class MainWindow : Window
         if (btnGenerateSql.IsChecked == true)
         {
             AddLogEntry("Начало генерации SQL");
+            if (parser.LastPdfData.Count > 0 && !sqlFormatter.CanGeneratePdfSql(parser))
+            {
+                AddLogEntry("PDF не добавлены в SQL: не задан YandexDiskRootUri в secrets.json или не найден бренд");
+            }
             lastSql = sqlFormatter.GenerateSqlForLastParsedProduct(parser, txtImageManufacturerPath.Text);
             Clipboard.SetText(lastSql);
             AddLogEntry($"Конец генерации SQL", sw);

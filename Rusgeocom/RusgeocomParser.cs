@@ -23,6 +23,15 @@ public class RusgeocomParser
     public DimensionsData? LastDimensionsData { get; private set; }
     public string[]? LastImagesData { get; private set; }
     public string? LastModelData { get; private set; }
+    public string? LastBrandData { get; private set; }
+
+    /// <summary>Бренд в виде части пути и имени файла: нижний регистр, пробелы заменены на "_" (AMO -> amo).</summary>
+    public string? LastBrandFolder => string.IsNullOrWhiteSpace(LastBrandData)
+        ? null
+        : LastBrandData.Trim().ToLowerInvariant().Replace(" ", "_");
+
+    /// <summary>Руководства по эксплуатации (PDF), скачанные в папку "pdf" внутри папки загрузки.</summary>
+    public List<PdfData> LastPdfData { get; private set; } = [];
 
     public RusgeocomParser(string downloadFolder)
     {
@@ -32,7 +41,7 @@ public class RusgeocomParser
             CookieContainer = new CookieContainer(),
             UseCookies = true
         });
-        client.Timeout = TimeSpan.FromSeconds(10);
+        client.Timeout = TimeSpan.FromSeconds(60); // PDF руководства могут весить несколько МБ
         client.DefaultRequestHeaders.Referrer = new Uri("https://www.rusgeocom.ru/");
         client.DefaultRequestHeaders.TryAddWithoutValidation("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/157.0.0.0 Safari/537.36");
         client.DefaultRequestHeaders.TryAddWithoutValidation("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7");
@@ -51,22 +60,12 @@ public class RusgeocomParser
         var doc = new HtmlDocument();
         doc.LoadHtml(html);
 
-        var title = doc.DocumentNode.SelectSingleNode("//h1")?.InnerText.TrimHtml();
-        if (string.IsNullOrEmpty(title))
-        {
-            throw new FormatException("Не найден заголовок товара (h1): скопирована не страница товара.");
-        }
-
-        // модель по умолчанию - артикул товара, если его нет - последнее слово заголовка
+        // модель (sku) по умолчанию - артикул со страницы товара
         if (string.IsNullOrWhiteSpace(model))
         {
             model = doc.DocumentNode
                 .SelectSingleNode("//span[@class='product-header__bottom-text' and contains(text(), 'Артикул ')]")?
-                .InnerText.Replace("Артикул ", string.Empty).Trim();
-        }
-        if (string.IsNullOrWhiteSpace(model))
-        {
-            model = title.Split(' ').Last().Trim();
+                .InnerText.Replace("Артикул ", "").Trim();
         }
 
         if (string.IsNullOrWhiteSpace(model) || model.Length < 3)
@@ -76,6 +75,10 @@ public class RusgeocomParser
 
         LastModelData = model;
 
+        LastBrandData = doc.DocumentNode
+            .SelectSingleNode("//div[@itemprop='brand']/meta[@itemprop='name' and @content]")?
+            .GetAttributeValue("content", "").Trim();
+
         var images = ParseImages(doc);
         LastImagesData = new string[images.Length];
 
@@ -83,7 +86,52 @@ public class RusgeocomParser
 
         progress?.Report($"Загружены изображения: {images.Length}");
 
+        var pdfLinks = ParsePdfLinks(doc);
+        await DownloadPdfFiles(model, pdfLinks).ConfigureAwait(false);
+
+        if (pdfLinks.Length > 0)
+        {
+            progress?.Report($"Загружены PDF: {LastPdfData.Count}");
+        }
+
         return BuildDescription(doc);
+    }
+
+    private static string[] ParsePdfLinks(HtmlDocument doc)
+    {
+        var nodes = doc.DocumentNode.SelectNodes(
+            "//a[@class='files__item-link' and contains(@download, 'Руководство по эксплуатации') and contains(@href, '.pdf')]");
+
+        return nodes?
+            .Select(a => a.GetAttributeValue("href", ""))
+            .Where(href => !string.IsNullOrWhiteSpace(href))
+            .Select(href => href.StartsWith("http", StringComparison.OrdinalIgnoreCase) ? href : SITE_HOST + href)
+            .Distinct()
+            .ToArray() ?? [];
+    }
+
+    // PDF сохраняются в подпапку "pdf" (изображения и их очистка её не затрагивают) и между товарами не удаляются
+    private async Task DownloadPdfFiles(string model, string[] urls)
+    {
+        if (urls.Length == 0)
+        {
+            return;
+        }
+
+        string pdfFolder = Path.Combine(downloadFolder, "pdf");
+        Directory.CreateDirectory(pdfFolder);
+
+        string pathModel = model.Replace("/", "_").Replace("\\", "_").ToLowerInvariant();
+
+        for (int i = 0; i < urls.Length; i++)
+        {
+            string fileName = urls.Length == 1 ? $"{pathModel}_manual.pdf" : $"{pathModel}_manual_{i + 1}.pdf";
+
+            var bytes = await client.GetByteArrayAsync(urls[i]).ConfigureAwait(false);
+            await File.WriteAllBytesAsync(Path.Combine(pdfFolder, fileName), bytes).ConfigureAwait(false);
+
+            LastPdfData.Add(new PdfData("Руководство по эксплуатации", fileName));
+        }
     }
 
     private static string[] ParseImages(HtmlDocument doc)
@@ -154,6 +202,8 @@ public class RusgeocomParser
         LastDimensionsData = null;
         LastImagesData = null;
         LastModelData = null;
+        LastBrandData = null;
+        LastPdfData = [];
         LastParseDescriptionHtml = null;
     }
 
@@ -326,6 +376,9 @@ public class RusgeocomParser
 
     private record Characteristic(string Group, string Name, string Value);
 }
+
+/// <summary>Название документа (для базы данных) и имя скачанного файла.</summary>
+public record PdfData(string Name, string FileName);
 
 internal static class StringExtensions
 {
