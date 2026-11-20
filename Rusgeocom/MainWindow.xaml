@@ -9,7 +9,7 @@
     Loaded="Window_Loaded"
     Width="800"
     
-    Height="450"
+    Height="281"
     mc:Ignorable="d">
     <Window.Resources>
         <Style TargetType="Button">
