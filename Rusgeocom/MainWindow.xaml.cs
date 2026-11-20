@@ -1,213 +1,171 @@
-﻿using Rusgeocom.ParserLib;
-using System;
-using System.Collections.Generic;
-using System.Media;
+﻿using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.DependencyInjection;
+using System.Collections.ObjectModel;
+using System.Diagnostics;
+using System.IO;
 using System.Windows;
 
-namespace Rusgeocom
+namespace Rusgeocom;
+/// <summary>
+/// Interaction logic for MainWindow.xaml
+/// </summary>
+public partial class MainWindow : Window
 {
-    /// <summary>
-    /// Логика взаимодействия для MainWindow.xaml
-    /// </summary>
-    public partial class MainWindow : Window
+    private const string downloadFolder = @"C:\Users\user\Downloads";
+    private readonly string imageResizerExeDir;
+    private readonly RusgeocomParser parser = new(downloadFolder);
+    private readonly SqlProductFormatter sqlFormatter = new();
+    private readonly FtpUploader ftpUploader;
+    private readonly DbQueryRunner dbQueryRunner;
+    private readonly ObservableCollection<string> logItems = new();
+    public MainWindow()
     {
-        private const string MISSING_SKUS_FILE_NAME = "missing_skus.txt";
-        private const string URLS_TO_PARSE_FILE_NAME = "urls_to_parse.txt";
-        private const string CUSTOM_BRAND_URI = "https://spb.rusgeocom.ru/brands/hikmicro";
+        InitializeComponent();
+        ftpUploader = App.AppHost.Services.GetRequiredService<FtpUploader>();
+        dbQueryRunner = App.AppHost.Services.GetRequiredService<DbQueryRunner>();
+        imageResizerExeDir = App.AppHost.Services.GetRequiredService<IConfiguration>()["ImageResizerExeDir"];
+        lbLogs.ItemsSource = logItems;
 
-        private readonly Manager manager;
+    }
 
-        public MainWindow()
+    private async void btnParseFromHtml_Click(object sender, RoutedEventArgs e)
+    {
+        SetStatus(false);
+        DeletePrevFiles();
+
+        string desc = "";
+        try
         {
-            InitializeComponent();
-
-            manager = new Manager("products.json", () =>
+            desc = await parser.ParseFromHtml(Clipboard.GetText(), txtModelName.Text, new Progress<string>((v) =>
             {
-                var window = new StartProductIdWindow();
-                window.ShowDialog();
-                var id = window.StartId;
-                if (id > 0)
-                {
-                    return id;
-                }
-                throw new ArgumentOutOfRangeException("Стартовый ID не выбран");
-            });
+                Title = v;
+                this.AddLogEntry(v);
+            }));
+            txtModelName.Text = parser.LastModelData;
+        }
+        catch (FormatException)
+        {
+            MessageBox.Show("Ошибка разбора HTML или модели (менее 3 символов)", "Информация", MessageBoxButton.OK, MessageBoxImage.Exclamation);
+            SetStatus(true);
+            return;
+        }
+
+        txtDescription.Text = desc.ToString();
+
+        string lastSql = "";
+
+        var swGlobal = Stopwatch.StartNew();
+        var sw = Stopwatch.StartNew();
+
+        if (btnGenerateSql.IsChecked == true)
+        {
+            AddLogEntry("Начало генерации SQL");
+            lastSql = sqlFormatter.GenerateSqlForLastParsedProduct(parser, txtImageManufacturerPath.Text);
+            Clipboard.SetText(lastSql);
+            AddLogEntry($"Конец генерации SQL", sw);
 
         }
 
-        private async void btnParse_Click(object sender, RoutedEventArgs e)
+        if (chkResizeImages.IsChecked == true)
         {
-            IsEnabled = false;
+            sw.Restart();
+            AddLogEntry("Начало изменения размера изображений");
+            await ResizeImages();
+            AddLogEntry($"Конец изменения размера изображений", sw);
+
+        }
+
+        if (btnUploadToFtp.IsChecked == true && parser.LastImagesData != null && parser.LastImagesData.Length > 0)
+        {
+            sw.Restart();
+            AddLogEntry("Начало загрузки изображений на FTP");
+            await ftpUploader.UploadImages(txtImageManufacturerPath.Text,
+                parser.LastImagesData.Select(img => Path.Combine(downloadFolder, img)),
+                new Progress<double>((v) => Title = $"Uploading images: {v:P2}"));
+            AddLogEntry($"Конец загрузки изображений на FTP", sw);
+        }
+
+        if (btnGenerateSql.IsChecked == true && chkAutoRunSql.IsChecked == true && !string.IsNullOrWhiteSpace(lastSql))
+        {
+            sw.Restart();
+            AddLogEntry("Начало выполнения SQL");
+
+            await dbQueryRunner.ValidateModelName(parser.LastModelData);
+            await dbQueryRunner.Execute(lastSql);
+            AddLogEntry($"Конец выполнения SQL", sw);
+        }
+
+        AddLogEntry($"Парсинг {parser.LastModelData ?? "???"} завершен", swGlobal);
+        SetStatus(true);
+
+
+        txtModelName.Text = "";
+    }
+
+    private void SetStatus(bool status)
+    {
+        this.IsEnabled = status;
+        myTaskbarProgress.ProgressState = status == false ? System.Windows.Shell.TaskbarItemProgressState.Indeterminate : System.Windows.Shell.TaskbarItemProgressState.Normal;
+    }
+
+    private void DeletePrevFiles()
+    {
+        var prevFiles = Directory.GetFiles(downloadFolder, "*.jpg");
+        foreach (var file in prevFiles)
+        {
             try
             {
-                await manager.Parse(new Progress<double>(v => pbIndicator.Value = v), MISSING_SKUS_FILE_NAME);
-                IsEnabled = true;
+                File.Delete(file);
             }
             catch (Exception ex)
             {
-                MessageBox.Show(ex.Message + "\r\n" + ex.StackTrace, "Ошибка", MessageBoxButton.OK, MessageBoxImage.Error);
+                AddLogEntry($"Не удалось удалить файл {file}: {ex.Message}");
             }
-            finally
-            {
-                IsEnabled = true;
-            }
-        }
-
-        private async void btnParseFile_Click(object sender, RoutedEventArgs e)
-        {
-            IsEnabled = false;
-            try
-            {
-                await manager.ParseUrls(URLS_TO_PARSE_FILE_NAME, new Progress<double>(v => pbIndicator.Value = v));
-                IsEnabled = true;
-            }
-            catch (Exception ex)
-            {
-                MessageBox.Show(ex.Message + "\r\n" + ex.StackTrace, "Ошибка", MessageBoxButton.OK, MessageBoxImage.Error);
-            }
-            finally
-            {
-                IsEnabled = true;
-            }
-        }
-
-        private async void btnParseBrand_Click(object sender, RoutedEventArgs e)
-        {
-            IsEnabled = false;
-            pbIndicator.IsIndeterminate = true;
-            try
-            {
-                await manager.ParseBrand(CUSTOM_BRAND_URI); // hikmicro
-                IsEnabled = true;
-            }
-            catch (Exception ex)
-            {
-
-                MessageBox.Show(ex.Message + "\r\n" + ex.StackTrace, "Ошибка", MessageBoxButton.OK, MessageBoxImage.Error);
-            }
-            finally
-            {
-                IsEnabled = true;
-                pbIndicator.IsIndeterminate = false;
-            }
-        }
-
-        private async void btnDownloadResources_Click(object sender, RoutedEventArgs e)
-        {
-            IsEnabled = false;
-
-            await manager.DownloadResource(new Progress<double>(v => pbIndicator.Value = v));
-
-            IsEnabled = true;
-
-        }
-
-        private void btnExportGeneral_Click(object sender, RoutedEventArgs e)
-        {
-            string data = manager.GetGeneralExport();
-            Clipboard.SetText(data);
-            MessageBox.Show("Все изображения должны быть преобразованы в .jpg!", "INFO", MessageBoxButton.OK, MessageBoxImage.Asterisk);
-        }
-
-        private void btnAdditionalImages_Click(object sender, RoutedEventArgs e)
-        {
-            string data = manager.GetAdditionalImagesExport();
-            Clipboard.SetText(data);
-            MessageBox.Show("Все изображения должны быть преобразованы в .jpg!", "INFO", MessageBoxButton.OK, MessageBoxImage.Asterisk);
-        }
-
-        private void btnGetModelRanges_Click(object sender, RoutedEventArgs e)
-        {
-            string data = manager.GetModelRanges();
-            Clipboard.SetText(data);
-        }
-
-        private void btnGetAccessories_Click(object sender, RoutedEventArgs e)
-        {
-            string data = manager.GetAccessories();
-            Clipboard.SetText(data);
-        }
-
-        private void btnGetZondes_Click(object sender, RoutedEventArgs e)
-        {
-            string data = manager.GetProbes();
-            Clipboard.SetText(data);
-        }
-
-        private void btnGosreetr_Click(object sender, RoutedEventArgs e)
-        {
-            string data = manager.GetGosreetr();
-            Clipboard.SetText(data);
-        }
-
-        private void btnGetCategories_Click(object sender, RoutedEventArgs e)
-        {
-            string data = manager.GetCategories();
-            Clipboard.SetText(data);
-        }
-
-        private void btnGetCategoriesProducts_Click(object sender, RoutedEventArgs e)
-        {
-            string data = manager.GetCategoriesProducts();
-            Clipboard.SetText(data);
-        }
-
-        private void btnDescEquip_Click(object sender, RoutedEventArgs e)
-        {
-            string data = manager.GetDescriptionAndEquipmentSql();
-            Clipboard.SetText(data);
-        }
-
-        private void btnGetPdf_Click(object sender, RoutedEventArgs e)
-        {
-            string data = manager.GetPdfSql();
-            Clipboard.SetText(data);
-        }
-
-        private void btnGetDimensions_Click(object sender, RoutedEventArgs e)
-        {
-            string data = manager.GetDimensionsSql();
-            Clipboard.SetText(data);
-        }
-
-        private void btnImagesSql_Click(object sender, RoutedEventArgs e)
-        {
-            string data = manager.GetImagesSql();
-            Clipboard.SetText(data);
-        }
-
-        private async void btnSingleFromHtml_Click(object sender, RoutedEventArgs e)
-        {
-            if (string.IsNullOrWhiteSpace(Clipboard.GetText()))
-            {
-                MessageBox.Show("HTML разметка не найдена в буфере обмена");
-                return;
-            }
-
-            btnSingleFromHtml.IsEnabled = false;
-            try
-            {
-                string data = await manager.ParseSingleProductFromHtml(Clipboard.GetText());
-                Clipboard.SetText(data);
-            }
-            catch (Exception ex)
-            {
-                MessageBox.Show(ex.Message + "\r\n" + ex.StackTrace, "Ошибка", MessageBoxButton.OK, MessageBoxImage.Error);
-            }
-            finally
-            {
-                btnSingleFromHtml.IsEnabled = true;
-                SystemSounds.Exclamation.Play();
-            }
-        }
-
-        private void Window_Loaded(object sender, RoutedEventArgs e)
-        {
-            List<string> infoList = new List<string>();
-            //infoList.Add("1) Перенести на .NET 10 , этот проект legacy .net framework 4.7");
-            infoList.Add("1) Переделать парсер на аналог того как для ВИ (копирование HTML с браузера, вставка SQL) т.к. в ручную слишком долго.");
-            infoList.Add("2) Сейчас изображения загружаются с помощью CNTRL+K на странице товара");
-            MessageBox.Show(string.Join(Environment.NewLine, infoList), "INFO", MessageBoxButton.OK, MessageBoxImage.Asterisk);
         }
     }
+
+    private void AddLogEntry(string v, Stopwatch sw = null)
+    {
+        string msg = $"{DateTime.Now} {v}";
+        if (sw != null)
+        {
+            msg += $" (заняло {(int)sw.Elapsed.TotalMilliseconds} ms)";
+        }
+        logItems.Insert(0, msg);
+    }
+
+    private async Task ResizeImages()
+    {
+        await Task.Run(async () =>
+        {
+            string resolution = "1000x1000";
+            string exe = $@"{imageResizerExeDir}\ImageCompressorApp.exe";
+            var pi = new ProcessStartInfo()
+            {
+                FileName = exe,
+                Arguments = $"{downloadFolder} {resolution}",
+                WorkingDirectory = imageResizerExeDir,
+                UseShellExecute = true,
+                WindowStyle = ProcessWindowStyle.Normal
+            };
+            var p = Process.Start(pi);
+            await p.WaitForExitAsync();
+        });
+        await Task.Delay(TimeSpan.FromSeconds(0.5));
+    }
+
+    private void Window_Loaded(object sender, RoutedEventArgs e)
+    {
+        if (!File.Exists(App.SETTINGS_FILE_NAME))
+        {
+            File.WriteAllText(App.SETTINGS_FILE_NAME, "catalog/manufacturer/products");
+        }
+        txtImageManufacturerPath.Text = File.ReadAllText(App.SETTINGS_FILE_NAME);
+    }
+
+    private void Window_Closing(object sender, System.ComponentModel.CancelEventArgs e)
+    {
+        File.WriteAllText(App.SETTINGS_FILE_NAME, txtImageManufacturerPath.Text);
+    }
+
 }

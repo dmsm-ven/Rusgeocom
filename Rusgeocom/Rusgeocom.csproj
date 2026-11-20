@@ -3,21 +3,19 @@
   <PropertyGroup>
     <OutputType>WinExe</OutputType>
     <TargetFramework>net10.0-windows</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
     <UseWPF>true</UseWPF>
-    <RootNamespace>Rusgeocom</RootNamespace>
-    <AssemblyName>Rusgeocom</AssemblyName>
-    <Nullable>disable</Nullable>
-    <ImplicitUsings>disable</ImplicitUsings>
-    <LangVersion>latest</LangVersion>
-    <Version>1.0.0</Version>
-    <Product>Rusgeocom</Product>
+    <UserSecretsId>bebd159c-f428-4d34-9ed2-d20cf5123373</UserSecretsId>
     <!-- Позволяет собирать WPF-проект не только на Windows (CI/Linux) -->
     <EnableWindowsTargeting>true</EnableWindowsTargeting>
   </PropertyGroup>
 
   <ItemGroup>
+    <PackageReference Include="Dapper" Version="2.1.79" />
     <PackageReference Include="HtmlAgilityPack" Version="1.12.4" />
-    <PackageReference Include="Newtonsoft.Json" Version="13.0.4" />
+    <PackageReference Include="Microsoft.Extensions.Hosting" Version="10.0.10" />
+    <PackageReference Include="MySqlConnector" Version="2.6.1" />
   </ItemGroup>
 
 </Project>
