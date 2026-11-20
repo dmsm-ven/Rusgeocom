@@ -25,6 +25,8 @@ namespace Rusgeocom.ParserLib
 
         public async Task<List<Product>> Parse(IEnumerable<string> skuToFind, IProgress<double> indicator)
         {
+            await EnsureBrowserSessionAsync(SPB_HOST);
+
             var list = new List<Product>();
 
 
@@ -73,6 +75,18 @@ namespace Rusgeocom.ParserLib
         public async Task<List<Product>> ParseUrls(IEnumerable<string> urls, IProgress<double> indicator)
         {
             var products = urls.Select(url => new Product() { Uri = url }).ToList();
+
+            // проверка браузера нужна для каждого хоста из списка (например, rusgeocom.ru и spb.rusgeocom.ru)
+            var origins = products
+                .Select(p => Uri.TryCreate(p.Uri, UriKind.Absolute, out var u) ? u.GetLeftPart(UriPartial.Authority) : null)
+                .Where(o => o != null)
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToList();
+            foreach (var origin in origins)
+            {
+                await EnsureBrowserSessionAsync(origin);
+            }
+
             int total = products.Count;
             int current = 0;
 
@@ -87,6 +101,7 @@ namespace Rusgeocom.ParserLib
 
         public async Task<List<Product>> ParseBrand(string brandUri)
         {
+            await EnsureBrowserSessionAsync(brandUri);
             var doc = await GetDocument(brandUri);
 
             List<Product> list = new List<Product>();
@@ -158,6 +173,12 @@ namespace Rusgeocom.ParserLib
             HtmlDocument doc = null;
             if (product.Uri != null)
             {
+                if (Uri.TryCreate(product.Uri, UriKind.Absolute, out var productUri))
+                {
+                    // не делает ничего, если проверка для этого хоста уже пройдена
+                    await EnsureBrowserSessionAsync(productUri.GetLeftPart(UriPartial.Authority));
+                }
+
                 doc = await GetDocument(product.Uri);
             }
             else
