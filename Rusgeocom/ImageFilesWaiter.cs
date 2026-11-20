@@ -5,13 +5,17 @@ namespace Rusgeocom;
 /// <summary>
 /// Ждёт, пока в папке появятся все ожидаемые файлы и закончится их запись/конвертация.
 /// Файлы считаются готовыми, если набор, размеры и время изменения не менялись в течение stableDelay
-/// и файлы не заняты другим процессом (например, конвертером webp -> jpg).
+/// и файлы не открыты на запись другим процессом (например, конвертером webp -> jpg).
+/// Чтение файла другими программами (просмотрщик, Проводник, антивирус) ожиданию не мешает.
 /// </summary>
 public static class ImageFilesWaiter
 {
+    private static readonly TimeSpan statusInterval = TimeSpan.FromSeconds(15);
+
     /// <param name="folder">Папка, в которой появляются файлы.</param>
-    /// <param name="baseNames">Имена файлов без расширения, например "AMO140_1".</param>
+    /// <param name="baseNames">Имена файлов без расширения, например "135054_1".</param>
     /// <param name="extensions">Допустимые расширения (с точкой), например ".jpg".</param>
+    /// <param name="status">Сообщения о том, чего именно не хватает (раз в 15 секунд).</param>
     /// <returns>true - все файлы готовы, false - время ожидания истекло.</returns>
     public static async Task<bool> WaitAsync(
         string folder,
@@ -19,41 +23,66 @@ public static class ImageFilesWaiter
         string[] extensions,
         TimeSpan stableDelay,
         TimeSpan timeout,
+        IProgress<string>? status = null,
         CancellationToken cancellationToken = default)
     {
         var started = DateTime.UtcNow;
+        var lastStatus = DateTime.UtcNow;
         string? lastSignature = null;
         var stableSince = DateTime.UtcNow;
+        string reason = "";
 
         while (DateTime.UtcNow - started < timeout)
         {
             cancellationToken.ThrowIfCancellationRequested();
 
-            var signature = GetSignature(folder, baseNames, extensions);
+            var files = FindFiles(folder, baseNames, extensions, out var missing);
 
-            if (signature == null)
+            if (files == null)
             {
-                lastSignature = null; // ещё не все файлы на месте
+                lastSignature = null;
+                reason = $"не найдены файлы: {string.Join(", ", missing.Select(m => m + ExtensionsHint(extensions)))}. " +
+                         $"В папке найдены: {ListExisting(folder, extensions)}";
             }
-            else if (signature != lastSignature)
+            else
             {
-                lastSignature = signature;
-                stableSince = DateTime.UtcNow;
+                var signature = string.Join("|", files.Select(f => $"{f.Name}:{f.Length}:{f.LastWriteTimeUtc.Ticks}"));
+
+                if (signature != lastSignature)
+                {
+                    lastSignature = signature;
+                    stableSince = DateTime.UtcNow;
+                    reason = "файлы ещё изменяются";
+                }
+                else if (DateTime.UtcNow - stableSince >= stableDelay)
+                {
+                    var locked = files.Where(IsBusy).Select(f => f.Name).ToList();
+                    if (locked.Count == 0)
+                    {
+                        return true;
+                    }
+
+                    reason = $"файлы заняты другим процессом (идёт запись/конвертация): {string.Join(", ", locked)}";
+                }
             }
-            else if (DateTime.UtcNow - stableSince >= stableDelay && AreUnlocked(folder, baseNames, extensions))
+
+            if (status != null && DateTime.UtcNow - lastStatus >= statusInterval)
             {
-                return true;
+                lastStatus = DateTime.UtcNow;
+                status.Report($"Ожидание: {reason}");
             }
 
             await Task.Delay(250, cancellationToken);
         }
 
+        status?.Report($"Ожидание прервано по таймауту: {reason}");
         return false;
     }
 
-    private static List<FileInfo>? FindFiles(string folder, IReadOnlyList<string> baseNames, string[] extensions)
+    private static List<FileInfo>? FindFiles(string folder, IReadOnlyList<string> baseNames, string[] extensions, out List<string> missing)
     {
         var result = new List<FileInfo>();
+        missing = new List<string>();
 
         foreach (var name in baseNames)
         {
@@ -63,47 +92,43 @@ public static class ImageFilesWaiter
 
             if (file == null)
             {
-                return null;
+                missing.Add(name);
             }
-
-            result.Add(file);
+            else
+            {
+                result.Add(file);
+            }
         }
 
-        return result;
+        return missing.Count == 0 ? result : null;
     }
 
-    private static string? GetSignature(string folder, IReadOnlyList<string> baseNames, string[] extensions)
+    private static string ExtensionsHint(string[] extensions) => extensions.Length == 1 ? extensions[0] : ".*";
+
+    private static string ListExisting(string folder, string[] extensions)
     {
-        var files = FindFiles(folder, baseNames, extensions);
-        return files == null
-            ? null
-            : string.Join("|", files.Select(f => $"{f.Name}:{f.Length}:{f.LastWriteTimeUtc.Ticks}"));
+        var names = extensions
+            .SelectMany(ext => Directory.GetFiles(folder, "*" + ext))
+            .Select(Path.GetFileName)
+            .Distinct()
+            .Take(10)
+            .ToList();
+
+        return names.Count == 0 ? "нет подходящих файлов" : string.Join(", ", names);
     }
 
-    private static bool AreUnlocked(string folder, IReadOnlyList<string> baseNames, string[] extensions)
+    // файл занят, если его нельзя открыть на чтение при условии, что другие процессы могут только читать
+    // (запись/конвертация держит файл открытым на запись)
+    private static bool IsBusy(FileInfo file)
     {
-        var files = FindFiles(folder, baseNames, extensions);
-        if (files == null)
+        try
         {
-            return false;
+            using var stream = new FileStream(file.FullName, FileMode.Open, FileAccess.Read, FileShare.Read);
+            return stream.Length == 0;
         }
-
-        foreach (var file in files)
+        catch (IOException)
         {
-            try
-            {
-                using var stream = new FileStream(file.FullName, FileMode.Open, FileAccess.Read, FileShare.None);
-                if (stream.Length == 0)
-                {
-                    return false;
-                }
-            }
-            catch (IOException)
-            {
-                return false;
-            }
+            return true;
         }
-
-        return true;
     }
 }

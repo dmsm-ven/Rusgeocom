@@ -87,6 +87,7 @@ public partial class MainWindow : Window
         var expectedBaseNames = expectedImages.Select(Path.GetFileNameWithoutExtension).ToList();
         var stableDelay = TimeSpan.FromSeconds(1);
         var waitTimeout = TimeSpan.FromMinutes(5);
+        var waitStatus = new Progress<string>(msg => AddLogEntry(msg));
 
         if (expectedImages.Length > 0 && (chkResizeImages.IsChecked == true || btnUploadToFtp.IsChecked == true))
         {
@@ -98,7 +99,7 @@ public partial class MainWindow : Window
             sw.Restart();
             // изображения сохраняет скрипт из браузера (webp/png/jpg), после того как все файлы записаны - изменяем размер и конвертируем в jpg
             bool ready = await ImageFilesWaiter.WaitAsync(downloadFolder, expectedBaseNames,
-                [".webp", ".png", ".avif", ".jpeg", ".jpg"], stableDelay, waitTimeout);
+                [".webp", ".png", ".avif", ".jpeg", ".jpg"], stableDelay, waitTimeout, waitStatus);
             if (!ready)
             {
                 StopWaitingForImages();
@@ -114,7 +115,7 @@ public partial class MainWindow : Window
         {
             sw.Restart();
             // выгрузка стартует только когда все jpg на месте и не менялись 1 секунду (конвертация webp -> jpg завершена)
-            bool ready = await ImageFilesWaiter.WaitAsync(downloadFolder, expectedBaseNames, [".jpg"], stableDelay, waitTimeout);
+            bool ready = await ImageFilesWaiter.WaitAsync(downloadFolder, expectedBaseNames, [".jpg"], stableDelay, waitTimeout, waitStatus);
             if (!ready)
             {
                 StopWaitingForImages();
