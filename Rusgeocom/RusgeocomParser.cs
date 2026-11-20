@@ -298,7 +298,7 @@ public class RusgeocomParser
         var charTable = doc.DocumentNode.SelectSingleNode("//div[@id='characteristics']/div/table");
         if (charTable != null)
         {
-            var chars = charTable.SelectNodes("//tr")?
+            var chars = charTable.SelectNodes(".//tr")?
                 .Select(tr => new Characteristic(
                     "Основные характеристики",
                     tr.SelectSingleNode("./th[1]")?.InnerText.TrimHtml() ?? "",
@@ -353,28 +353,34 @@ public class RusgeocomParser
     }
 
     // габариты и вес берутся из характеристик ("Размеры"/"Габариты", "Вес"/"Масса")
-    private static DimensionsData ParseDimensions(List<Characteristic> characteristics)
+    internal static DimensionsData ParseDimensions(List<Characteristic> characteristics)
     {
-        var dimensionsValue = characteristics.FirstOrDefault(c => c.Name is "Размеры" or "Габариты")?.Value ?? "";
-        var weightValue = characteristics.FirstOrDefault(c => c.Name is "Вес" or "Масса")?.Value ?? "";
+        // в разметке встречаются &nbsp; и переводы строк, поэтому значения приводятся к обычному тексту
+        string Normalize(string s) => Regex.Replace(HtmlEntity.DeEntitize(s), @"\s+", " ").Trim();
 
-        var dimMatch = Regex.Match(dimensionsValue, @"(\d+) ?[xхXХ] ?(\d+) ?[xхXХ] ?(\d+) ?мм");
-        var weightMatch = Regex.Match(weightValue, @"(\d+([\.,]\d+)?) ?кг");
+        var dimensionsValue = characteristics
+            .FirstOrDefault(c => Normalize(c.Name) is "Размеры" or "Габариты")?.Value ?? "";
+        var weightValue = characteristics
+            .FirstOrDefault(c => Normalize(c.Name) is "Вес" or "Масса")?.Value ?? "";
 
-        decimal.TryParse(weightMatch.Groups[1].Value.Replace(",", "."),
-            System.Globalization.NumberStyles.Number,
-            System.Globalization.CultureInfo.InvariantCulture, out var weight);
+        // "180 х 160 х 150 мм": разделитель - русская/латинская x или знак умножения, число может быть дробным
+        var dimMatch = Regex.Match(Normalize(dimensionsValue),
+            @"(\d+(?:[.,]\d+)?)\s*[xхXХ×*]\s*(\d+(?:[.,]\d+)?)\s*[xхXХ×*]\s*(\d+(?:[.,]\d+)?)\s*мм");
+        var weightMatch = Regex.Match(Normalize(weightValue), @"(\d+(?:[.,]\d+)?)\s*кг");
+
+        static decimal ToDecimal(string s) => decimal.Parse(s.Replace(",", "."),
+            System.Globalization.NumberStyles.Number, System.Globalization.CultureInfo.InvariantCulture);
 
         return new DimensionsData
         {
-            LengthMm = dimMatch.Success ? int.Parse(dimMatch.Groups[1].Value) : 0,
-            WidthMm = dimMatch.Success ? int.Parse(dimMatch.Groups[2].Value) : 0,
-            HeightMm = dimMatch.Success ? int.Parse(dimMatch.Groups[3].Value) : 0,
-            WeightKg = weight
+            LengthMm = dimMatch.Success ? ToDecimal(dimMatch.Groups[1].Value) : 0,
+            WidthMm = dimMatch.Success ? ToDecimal(dimMatch.Groups[2].Value) : 0,
+            HeightMm = dimMatch.Success ? ToDecimal(dimMatch.Groups[3].Value) : 0,
+            WeightKg = weightMatch.Success ? ToDecimal(weightMatch.Groups[1].Value) : 0
         };
     }
 
-    private record Characteristic(string Group, string Name, string Value);
+    internal record Characteristic(string Group, string Name, string Value);
 }
 
 /// <summary>Название документа (для базы данных) и имя скачанного файла.</summary>
