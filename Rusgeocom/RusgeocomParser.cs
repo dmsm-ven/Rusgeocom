@@ -1,4 +1,4 @@
-using HtmlAgilityPack;
+﻿using HtmlAgilityPack;
 using System.IO;
 using System.Net;
 using System.Net.Http;
@@ -79,12 +79,9 @@ public class RusgeocomParser
             .SelectSingleNode("//div[@itemprop='brand']/meta[@itemprop='name' and @content]")?
             .GetAttributeValue("content", "").Trim();
 
-        var images = ParseImages(doc);
-        LastImagesData = new string[images.Length];
-
-        await DownloadImages(model, images).ConfigureAwait(false);
-
-        progress?.Report($"Загружены изображения: {images.Length}");
+        // изображения сайт отдаёт только браузеру: их сохраняет скрипт вручную под именами {модель}_{номер}.*
+        LastImagesData = GetExpectedImageNames(model, CountImages(doc));
+        progress?.Report($"Ожидаемые изображения: {LastImagesData.Length}");
 
         var pdfLinks = ParsePdfLinks(doc);
         await DownloadPdfFiles(model, pdfLinks).ConfigureAwait(false);
@@ -134,67 +131,27 @@ public class RusgeocomParser
         }
     }
 
-    private static string[] ParseImages(HtmlDocument doc)
+    // количество изображений в галерее товара (миниатюры)
+    private static int CountImages(HtmlDocument doc)
     {
         var nodes = doc.DocumentNode.SelectNodes("//div[@class='product-images__thumbs-list']//img");
         if (nodes == null)
         {
-            return [];
+            return 0;
         }
 
         return nodes
             .Select(img => img.GetAttributeValue("src", ""))
             .Where(src => !string.IsNullOrEmpty(src) && !src.StartsWith("data"))
-            .Select(src => GetImageSource(src.Replace("small.web", "big.web")))
             .Distinct()
-            .ToArray();
+            .Count();
     }
 
-    private static string GetImageSource(string uri)
-    {
-        if (uri.Contains("resize_cache"))
-        {
-            var uriParts = uri.Replace("resize_cache/", string.Empty).Split('/').ToList();
-            uriParts.RemoveAt(uriParts.Count - 2);
-            return SITE_HOST + string.Join("/", uriParts);
-        }
-
-        return SITE_HOST + uri;
-    }
-
-    private async Task DownloadImages(string model, string[] images)
+    /// <summary>Итоговые имена файлов после конвертации в jpg: {модель}_1.jpg, {модель}_2.jpg ...</summary>
+    private static string[] GetExpectedImageNames(string model, int count)
     {
         string pathModel = model.Replace("/", "_").Replace("\\", "_");
-
-        var imageCount = images.Length;
-        var maxDegreeOfParallelism = Math.Min(8, Math.Max(2, Environment.ProcessorCount));
-        var semaphore = new SemaphoreSlim(maxDegreeOfParallelism);
-        var downloadTasks = new List<Task>(imageCount);
-
-        for (int i = 0; i < imageCount; i++)
-        {
-            var index = i;
-            var imageUrl = images[index];
-
-            await semaphore.WaitAsync().ConfigureAwait(false);
-
-            downloadTasks.Add(Task.Run(async () =>
-            {
-                try
-                {
-                    var bytes = await client.GetByteArrayAsync(imageUrl).ConfigureAwait(false);
-                    var fileName = Path.Combine(downloadFolder, $"{pathModel}_{index + 1}{Path.GetExtension(imageUrl)}");
-                    await File.WriteAllBytesAsync(fileName, bytes).ConfigureAwait(false);
-                    LastImagesData![index] = Path.GetFileNameWithoutExtension(fileName) + ".jpg";
-                }
-                finally
-                {
-                    semaphore.Release();
-                }
-            }));
-        }
-
-        await Task.WhenAll(downloadTasks).ConfigureAwait(false);
+        return Enumerable.Range(1, count).Select(i => $"{pathModel}_{i}.jpg").ToArray();
     }
 
     private void ClearLastParsedData()

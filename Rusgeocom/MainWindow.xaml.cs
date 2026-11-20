@@ -33,7 +33,6 @@ public partial class MainWindow : Window
     private async void btnParseFromHtml_Click(object sender, RoutedEventArgs e)
     {
         SetStatus(false);
-        DeletePrevFiles();
 
         string desc = "";
         try
@@ -62,6 +61,8 @@ public partial class MainWindow : Window
             return;
         }
 
+        DeletePrevFiles(parser.LastImagesData ?? []);
+
         txtDescription.Text = desc.ToString();
 
         string lastSql = "";
@@ -82,21 +83,47 @@ public partial class MainWindow : Window
 
         }
 
-        if (chkResizeImages.IsChecked == true)
+        var expectedImages = parser.LastImagesData ?? [];
+        var expectedBaseNames = expectedImages.Select(Path.GetFileNameWithoutExtension).ToList();
+        var stableDelay = TimeSpan.FromSeconds(1);
+        var waitTimeout = TimeSpan.FromMinutes(5);
+
+        if (expectedImages.Length > 0 && (chkResizeImages.IsChecked == true || btnUploadToFtp.IsChecked == true))
+        {
+            AddLogEntry($"Ожидание изображений в {downloadFolder}: {string.Join(", ", expectedImages)}");
+        }
+
+        if (expectedImages.Length > 0 && chkResizeImages.IsChecked == true)
         {
             sw.Restart();
+            // изображения сохраняет скрипт из браузера (webp/png/jpg), после того как все файлы записаны - изменяем размер и конвертируем в jpg
+            bool ready = await ImageFilesWaiter.WaitAsync(downloadFolder, expectedBaseNames,
+                [".webp", ".png", ".avif", ".jpeg", ".jpg"], stableDelay, waitTimeout);
+            if (!ready)
+            {
+                StopWaitingForImages();
+                return;
+            }
+
             AddLogEntry("Начало изменения размера изображений");
             await ResizeImages();
             AddLogEntry($"Конец изменения размера изображений", sw);
-
         }
 
-        if (btnUploadToFtp.IsChecked == true && parser.LastImagesData != null && parser.LastImagesData.Length > 0)
+        if (btnUploadToFtp.IsChecked == true && expectedImages.Length > 0)
         {
             sw.Restart();
+            // выгрузка стартует только когда все jpg на месте и не менялись 1 секунду (конвертация webp -> jpg завершена)
+            bool ready = await ImageFilesWaiter.WaitAsync(downloadFolder, expectedBaseNames, [".jpg"], stableDelay, waitTimeout);
+            if (!ready)
+            {
+                StopWaitingForImages();
+                return;
+            }
+
             AddLogEntry("Начало загрузки изображений на FTP");
             await ftpUploader.UploadImages(txtImageManufacturerPath.Text,
-                parser.LastImagesData.Select(img => Path.Combine(downloadFolder, img)),
+                expectedImages.Select(img => Path.Combine(downloadFolder, img)),
                 new Progress<double>((v) => Title = $"Uploading images: {v:P2}"));
             AddLogEntry($"Конец загрузки изображений на FTP", sw);
         }
@@ -118,15 +145,23 @@ public partial class MainWindow : Window
         txtModelName.Text = "";
     }
 
+    private void StopWaitingForImages()
+    {
+        AddLogEntry("Время ожидания изображений истекло: проверьте, что файлы сохранены как {модель}_{номер} и конвертированы в jpg. SQL не выполнен");
+        SetStatus(true);
+    }
+
     private void SetStatus(bool status)
     {
         this.IsEnabled = status;
         myTaskbarProgress.ProgressState = status == false ? System.Windows.Shell.TaskbarItemProgressState.Indeterminate : System.Windows.Shell.TaskbarItemProgressState.Normal;
     }
 
-    private void DeletePrevFiles()
+    // удаляются jpg предыдущих товаров; файлы текущего товара (скрипт мог отработать до нажатия кнопки) остаются
+    private void DeletePrevFiles(IEnumerable<string> keepFileNames)
     {
-        var prevFiles = Directory.GetFiles(downloadFolder, "*.jpg");
+        var keep = new HashSet<string>(keepFileNames, StringComparer.OrdinalIgnoreCase);
+        var prevFiles = Directory.GetFiles(downloadFolder, "*.jpg").Where(file => !keep.Contains(Path.GetFileName(file)));
         foreach (var file in prevFiles)
         {
             try
