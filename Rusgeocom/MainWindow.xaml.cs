@@ -162,12 +162,20 @@ public partial class MainWindow : Window
     private void DeletePrevFiles(IEnumerable<string> keepFileNames)
     {
         var keep = new HashSet<string>(keepFileNames, StringComparer.OrdinalIgnoreCase);
-        var prevFiles = Directory.GetFiles(downloadFolder, "*.jpg").Where(file => !keep.Contains(Path.GetFileName(file)));
+        var prevFiles = Directory
+            .GetFiles(downloadFolder, "*.jpg")
+            .Where(file => !keep.Contains(Path.GetFileName(file)));
+
         foreach (var file in prevFiles)
         {
             try
             {
                 File.Delete(file);
+                var webpPath = file.Replace(".jpg", ".webp");
+                if (File.Exists(webpPath))
+                {
+                    File.Delete(webpPath);
+                }
             }
             catch (Exception ex)
             {
