@@ -122,10 +122,10 @@ public class RusgeocomParser
 
         for (int i = 0; i < urls.Length; i++)
         {
-            string fileName = urls.Length == 1 ? $"{pathModel}_manual.pdf" : $"{pathModel}_manual_{i + 1}.pdf";
+            string fileName = Path.GetFileName(urls[i]);
 
-            var bytes = await client.GetByteArrayAsync(urls[i]).ConfigureAwait(false);
-            await File.WriteAllBytesAsync(Path.Combine(pdfFolder, fileName), bytes).ConfigureAwait(false);
+            //var bytes = await client.GetByteArrayAsync(urls[i]).ConfigureAwait(false);
+            //await File.WriteAllBytesAsync(Path.Combine(pdfFolder, fileName), bytes).ConfigureAwait(false);
 
             LastPdfData.Add(new PdfData("Руководство по эксплуатации", fileName));
         }
